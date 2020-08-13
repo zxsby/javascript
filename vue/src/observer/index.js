@@ -1,13 +1,15 @@
 import { arrayMethods } from "./array"
+import { defineProperty } from "../util.js"
 
 class Observer{
     constructor(value){
         //判断是否被观测过
-        Object.defineProperty(value,'__ob__',{
-            enumerable:false, // 不能被枚举 ，不能被循环
-            configurable:false,
-            value:this
-        })
+        defineProperty(value,'__ob__',this)
+        // Object.defineProperty(value,'__ob__',{
+        //     enumerable:false, // 不能被枚举 ，不能被循环
+        //     configurable:false,
+        //     value:this
+        // })
         // 使用defineProperty 重新定义属性
         if(Array.isArray(value)){
             //调用push shift unshift splice sort reverse pop 

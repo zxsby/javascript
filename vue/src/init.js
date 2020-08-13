@@ -1,4 +1,6 @@
 import { initState } from "./state";
+import { compileToFunctions } from "./compiler/index";
+import { mountComponent } from "./lifecycle";
 
 export function initMixin(Vue){
     //初始化操作
@@ -15,5 +17,33 @@ export function initMixin(Vue){
         //vue 是一个什么样的框架 
 
         // MVVM 数据变化视图会更新，视图变化数据会被影响 MVVM不能跳过数据取跟新视图
+
+
+        //如果当前有el属性说明要渲染模板
+        if(vm.$options.el){
+            vm.$mount(vm.$options.el)
+        }
     }
+    //挂载操作
+    Vue.prototype.$mount = function(el){
+        const vm = this
+        const options = vm.$options
+        el = document.querySelector(el)
+        vm.$el = el
+        if(!options.render){
+            //没render 将template转换为render
+            let template = options.template
+            if(!template && el){
+                template = el.outerHTML
+            }
+            const render = compileToFunctions(template)
+            options.render = render
+        }
+        // 编译原理 将模板编译成render函数
+      
+        // 需要挂载这个组件
+        mountComponent(vm,el)
+    }
+
+    
 }

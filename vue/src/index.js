@@ -1,6 +1,8 @@
 // new Vue({})
 
 import { initMixin } from "./init"
+import { lifecycleMixin } from "./lifecycle"
+import { renderMixin } from "./vode/index"
 
 // es6的类的写法 一个整体
 
@@ -10,6 +12,8 @@ function Vue(options){
 
 initMixin(Vue)
 
+lifecycleMixin(Vue) //混和生命周期
 
+renderMixin(Vue)
 
 export default Vue
