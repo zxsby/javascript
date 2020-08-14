@@ -3,6 +3,7 @@
 import { initMixin } from "./init"
 import { lifecycleMixin } from "./lifecycle"
 import { renderMixin } from "./vode/index"
+import { initGlobalApi } from "./global-api/index"
 
 // es6的类的写法 一个整体
 
@@ -12,8 +13,10 @@ function Vue(options){
 
 initMixin(Vue)
 
-lifecycleMixin(Vue) //混和生命周期
+lifecycleMixin(Vue) //_upadta
 
-renderMixin(Vue)
+renderMixin(Vue)// _render
+
+initGlobalApi(Vue)
 
 export default Vue

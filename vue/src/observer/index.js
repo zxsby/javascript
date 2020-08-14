@@ -1,21 +1,17 @@
 import { arrayMethods } from "./array"
 import { defineProperty } from "../util.js"
+import Dep from "./dep"
 
 class Observer{
     constructor(value){
         //判断是否被观测过
         defineProperty(value,'__ob__',this)
-        // Object.defineProperty(value,'__ob__',{
-        //     enumerable:false, // 不能被枚举 ，不能被循环
-        //     configurable:false,
-        //     value:this
-        // })
         // 使用defineProperty 重新定义属性
         if(Array.isArray(value)){
             //调用push shift unshift splice sort reverse pop 
             //函数劫持，切片编程
             value.__proto__ = arrayMethods
-            this.observeArray(value)
+            this.observeArray(value)//数组中普通类型是不做观测的
         }else{
             this.walk(value)
         }
@@ -35,14 +31,20 @@ class Observer{
 
 function defineReactive(data,key,value){
     observer(value)
+    let dep = new Dep()  //每个属性都有一个dep
+    // 当页面取值时 说明这个值用来渲染了，将这个watcher和这个属性对应起来
     Object.defineProperty(data,key,{
         get(){
+            if(Dep.target){ //让这个属性记住这个watcher
+                dep.depend()
+            }
             return value
         },
         set(newValue){
             if(newValue == value) return;
             observer(newValue)
             value = newValue
+            dep.notify()
         }
     })
 }
@@ -54,4 +56,7 @@ export function observer(data){
         return
     }
     return new Observer(data)
+
+    //之观测存在的属性
+    //数组中更改索引和长度 无法被监控
 }

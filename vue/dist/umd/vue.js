@@ -150,24 +150,119 @@
       value: that
     });
   }
+  var LIFECYCLE_HOOKS = ['beforeCreate', 'created', 'beforeMount', 'mounted', 'beforeUpdate', 'updated', 'beforeDestroy', 'destroyed'];
+  var strats = {};
+
+  strats.data = function (parentVal, childValue) {
+    return childValue; // 这里应该有合并data的策略
+  };
+
+  strats.computed = function () {};
+
+  strats.watch = function () {};
+
+  function mergeHook(parentVal, childValue) {
+    // 生命周期的合并
+    if (childValue) {
+      if (parentVal) {
+        return parentVal.concat(childValue); // 爸爸和儿子进行拼接
+      } else {
+        return [childValue]; //儿子需要转化成数组
+      }
+    } else {
+      return parentVal; // 不合并了 采用父亲的
+    }
+  }
+
+  LIFECYCLE_HOOKS.forEach(function (hook) {
+    strats[hook] = mergeHook;
+  });
+  function mergeOptions(parent, child) {
+    // 遍历父亲 ，可能是父亲有 儿子没有 
+    var options = {};
+
+    for (var key in parent) {
+      // 父亲和儿子都有在这就处理了
+      mergeField(key);
+    } // 儿子有父亲没有 在这处理
+
+
+    for (var _key in child) {
+      // 将儿子多的赋予到父亲上
+      if (!parent.hasOwnProperty(_key)) {
+        mergeField(_key);
+      }
+    }
+
+    function mergeField(key) {
+      // 合并字段
+      // 根据key 不同的策略来进行合并 
+      if (strats[key]) {
+        options[key] = strats[key](parent[key], child[key]);
+      } else {
+        // todo默认合并
+        options[key] = child[key];
+      }
+    }
+
+    return options;
+  }
+
+  var id = 0;
+
+  var Dep = /*#__PURE__*/function () {
+    function Dep() {
+      _classCallCheck(this, Dep);
+
+      this.subs = [];
+      this.id = id++;
+    }
+
+    _createClass(Dep, [{
+      key: "depend",
+      value: function depend() {
+        // 我们希望 watcher 可以存放dep
+        Dep.target.addDep(this);
+      }
+    }, {
+      key: "addSub",
+      value: function addSub(watcher) {
+        this.subs.push(watcher);
+      }
+    }, {
+      key: "notify",
+      value: function notify() {
+        this.subs.forEach(function (watcher) {
+          return watcher.update();
+        });
+      }
+    }]);
+
+    return Dep;
+  }();
+
+  Dep.target = null;
+  function pushTarget(watcher) {
+    Dep.target = watcher; //保留watcher
+  }
+  function popTarget() {
+    Dep.target = null; //删除watcher
+  }
+  //dep可以存多个watcher 
+  // 一个watcher可以对应多个dep
 
   var Observer = /*#__PURE__*/function () {
     function Observer(value) {
       _classCallCheck(this, Observer);
 
       //判断是否被观测过
-      defineProperty(value, '__ob__', this); // Object.defineProperty(value,'__ob__',{
-      //     enumerable:false, // 不能被枚举 ，不能被循环
-      //     configurable:false,
-      //     value:this
-      // })
-      // 使用defineProperty 重新定义属性
+      defineProperty(value, '__ob__', this); // 使用defineProperty 重新定义属性
 
       if (Array.isArray(value)) {
         //调用push shift unshift splice sort reverse pop 
         //函数劫持，切片编程
         value.__proto__ = arrayMethods;
-        this.observeArray(value);
+        this.observeArray(value); //数组中普通类型是不做观测的
       } else {
         this.walk(value);
       }
@@ -197,14 +292,23 @@
 
   function defineReactive(data, key, value) {
     observer(value);
+    var dep = new Dep(); //每个属性都有一个dep
+    // 当页面取值时 说明这个值用来渲染了，将这个watcher和这个属性对应起来
+
     Object.defineProperty(data, key, {
       get: function get() {
+        if (Dep.target) {
+          //让这个属性记住这个watcher
+          dep.depend();
+        }
+
         return value;
       },
       set: function set(newValue) {
         if (newValue == value) return;
         observer(newValue);
         value = newValue;
+        dep.notify();
       }
     });
   }
@@ -218,7 +322,8 @@
       return;
     }
 
-    return new Observer(data);
+    return new Observer(data); //之观测存在的属性
+    //数组中更改索引和长度 无法被监控
   }
 
   function initState(vm) {
@@ -510,6 +615,7 @@
     parentElm.insertBefore(el, oldVnode.nextSibling); //当前的真实元素插入到app的后面
 
     parentElm.removeChild(oldVnode);
+    return el;
   }
 
   function createElm(vnode) {
@@ -521,7 +627,9 @@
 
     if (typeof tag == 'string') {
       vnode.el = document.createElement(tag); // 创建元素放到vnode.el上
+      //只有元素才有属性
 
+      updateProperties(vnode);
       children.forEach(function (child) {
         // 遍历儿子 将儿子渲染后的结果扔到父亲中
         vnode.el.appendChild(createElm(child));
@@ -534,26 +642,119 @@
     return vnode.el;
   }
 
+  function updateProperties(vnode) {
+    var el = vnode.el;
+    var newProps = vnode.data || {};
+
+    for (var key in newProps) {
+      if (key == 'style') {
+        for (var styleName in newProps.style) {
+          el.style[styleName] = newProps.style[styleName];
+        }
+      } else if (key == 'class') {
+        el.className = el.class;
+      } else {
+        el.setAttribute(key, newProps[key]);
+      }
+    }
+  }
+
+  var id$1 = 0;
+
+  var Watcher = /*#__PURE__*/function () {
+    //vm 实例
+    //extrOrFn vm._updatae(vm._render)
+    function Watcher(vm, estrOrFn, cb, options) {
+      _classCallCheck(this, Watcher);
+
+      this.vm = vm;
+      this.estrOrFn = estrOrFn;
+      this.cb = cb;
+      this.options = options;
+      this.id = id$1++; //watcher的唯一标识
+
+      this.deps = []; //watcher 记录有多少dep来依赖他
+
+      this.depsId = new Set();
+
+      if (typeof estrOrFn == 'function') {
+        this.getter = estrOrFn;
+      }
+
+      this.get(); //默认会调用get方法
+    }
+
+    _createClass(Watcher, [{
+      key: "addDep",
+      value: function addDep(dep) {
+        var id = dep.id;
+
+        if (!this.depsId.has(id)) {
+          this.deps.push(dep);
+          this.depsId.add(id);
+          dep.addSub(this);
+        }
+      }
+    }, {
+      key: "get",
+      value: function get() {
+        pushTarget(this); //当前watcher实例
+
+        this.getter(); // 调用estrOrFn 这里是渲染页面 render方法
+
+        popTarget();
+      }
+    }, {
+      key: "update",
+      value: function update() {
+        this.get();
+      }
+    }]);
+
+    return Watcher;
+  }();
+
   function lifecycleMixin(Vue) {
     Vue.prototype._update = function (vnode) {
       var vm = this;
-      console.log(vnode);
-      patch(vm.$el, vnode);
+      vm.$el = patch(vm.$el, vnode);
     };
   }
   function mountComponent(vm, el) {
     //调用render方法去渲染 el属性
     //先调用render方法创建虚拟节点，在将虚拟节点渲染到页面上
-    vm._update(vm._render());
+    callHook(vm, 'beforeMount'); // vm._update(vm._render())
+
+    var undateComponent = function undateComponent() {
+      vm._update(vm._render());
+    };
+
+    new Watcher(vm, undateComponent, function () {
+      callHook(vm, 'beforeUpdate');
+    }, true); // 要把属性和watcher绑定
+
+    callHook(vm, 'mounted');
+  }
+  function callHook(vm, hook) {
+    var handlers = vm.$options[hook];
+
+    if (handlers) {
+      for (var i = 0; i < handlers.length; i++) {
+        handlers[i].call(vm);
+      }
+    }
   }
 
   function initMixin(Vue) {
     //初始化操作
     Vue.prototype._init = function (options) {
       var vm = this;
-      vm.$options = options; //初始化状态（将数据做一个初始化的劫持 当我改变数据时应该跟新视图）
+      vm.$options = mergeOptions(vm.constructor.options, options); //需要将用户自定义的options 和全局的options做合并
 
-      initState(vm); //vue组件中有很多状态 data props watcch computed
+      callHook(vm, 'beforeCreate'); //初始化状态（将数据做一个初始化的劫持 当我改变数据时应该跟新视图）
+
+      initState(vm);
+      callHook(vm, 'created'); //vue组件中有很多状态 data props watcch computed
       //vue里面核心特性 响应式数据原理
       //vue 是一个什么样的框架 
       // MVVM 数据变化视图会更新，视图变化数据会被影响 MVVM不能跳过数据取跟新视图
@@ -639,6 +840,14 @@
     };
   }
 
+  function initGlobalApi(Vue) {
+    Vue.options = {}; // 
+
+    Vue.mixin = function (mixin) {
+      this.options = mergeOptions(this.options, mixin); //合并属性
+    };
+  }
+
   // new Vue({})
 
   function Vue(options) {
@@ -647,9 +856,11 @@
   }
 
   initMixin(Vue);
-  lifecycleMixin(Vue); //混和生命周期
+  lifecycleMixin(Vue); //_upadta
 
-  renderMixin(Vue);
+  renderMixin(Vue); // _render
+
+  initGlobalApi(Vue);
 
   return Vue;
 
